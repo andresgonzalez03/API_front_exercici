@@ -1,7 +1,7 @@
 from client import db_client
 
 # llegir tots els camps de la taula alumne 
-def read(orderby: str = None, contain: str = None, skip: int = 0, limit: str = None):
+def read(orderby: str | None = None,  contain: str | None = None, skip: int = 0, limit: int | None = None):
     try:
         conn = db_client()
         cur = conn.cursor()
@@ -13,15 +13,14 @@ def read(orderby: str = None, contain: str = None, skip: int = 0, limit: str = N
         if orderby:
             if orderby.lower() == "asc":
                 query += " order by a.NomAlumne asc"
-            elif orderby.lower == "desc":
+            elif orderby.lower() == "desc":
                 query += " order by a.NomAlumne desc"
 
         if limit is not None:
             query += f" LIMIT {limit}"
-
-        if skip:
-            query += f" OFFSET {skip}"
-    
+            if skip:
+                query += f" OFFSET {skip}"
+        
         cur.execute(query)
         alumnes = cur.fetchall()
     
@@ -63,13 +62,32 @@ def read_alumneAll():
         conn.close()
     return alumne
 
-# crear alumne
-def create_alumne(IdAula, NomAlumne, Cicle, Curs, Grup):        
+# crear alumne amb idAula
+def create_alumne(IdAula, NomAlumne, Cicle, Curs, Grup):
+        
     try:
         conn = db_client()
         cur = conn.cursor()
         query =  "INSERT INTO Alumne (IdAula, NomAlumne, Cicle, Curs, Grup) VALUES (%s,%s,%s,%s,%s);"
         values = (IdAula, NomAlumne, Cicle, Curs, Grup)
+        cur.execute(query,values)
+        conn.commit()
+        alumne_id = cur.lastrowid
+    except Exception as e:
+        return {"status": -1, "message": f"Error de connexió:{e}" }
+    
+    finally:
+        conn.close()
+    return alumne_id
+
+# crear alumne amb DescAula
+def create_alumneDescAula(NomAlumne, Cicle, Curs, Grup, DescAula):
+        
+    try:
+        conn = db_client()
+        cur = conn.cursor()
+        query =  "INSERT INTO Alumne (NomAlumne, Cicle, Curs, Grup, DescAula) VALUES (%s,%s,%s,%s,%s);"
+        values = (NomAlumne, Cicle, Curs, Grup, DescAula)
         cur.execute(query,values)
         conn.commit()
         alumne_id = cur.lastrowid
@@ -157,7 +175,7 @@ def check_idAula(idAula):
         print(f"Error al verificar IdAula: {e}")
         return False
     finally:
-        conn.close()
+        conn.close()    
         
 # verifica si el id de l'alumne existeix
 def check_idAlumne_exists(IdAlumne):

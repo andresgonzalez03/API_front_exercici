@@ -4,8 +4,8 @@ import alumnes
 from typing import List
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-import os
+import csv
+from fastapi import FastAPI, File, UploadFile
 
 
 
@@ -22,14 +22,14 @@ app.add_middleware(
 
 # model d'alumne
 class Alumne(BaseModel):
-    idAlumne: int
-    idAula: int
-    nom: str
-    cicle : str
-    curs: str
-    grup: str
+    IdAlumne: int
+    IdAula: int
+    NomClient: str
+    Cicle : str
+    Curs: str
+    Grup: str
 
-# model d'alumne actualitzat (no posso idAlumne, perquè no es pot actualitzar ja que és una primary key)
+# model d'alumne actualitzat (no posso idAlumne, perquè no es pot actualitzar)
 class AlumneUpdate(BaseModel):
     IdAula: int
     NomAlumne: str
@@ -43,7 +43,7 @@ class tablaAlumne(BaseModel):
     Curs:str
     Grup:str
     DescAula:str
-    
+  
 class Aula(BaseModel):
     DescAula:str
     Edifici:str
@@ -53,9 +53,9 @@ class Aula(BaseModel):
 def read_root():
     return{"Alumnes API"}
         
-# método que devuelve una lista de alumnos y permite usar parámetros 
+# método que devuelve una lista de alumnos y permite usar cláusulas de query
 @app.get("/alumne/list", response_model=List[tablaAlumne])
-def read_alumnes(orderby: str = None, contain: str = None, skip: int = 0, limit: str = None):
+def read_alumnes(orderby: str | None = None,  contain: str | None = None, skip: int = 0, limit: int | None = None ):
     alumnes_data = db_alumnes.read(orderby=orderby, contain=contain, skip=skip, limit=limit)
     if not alumnes_data:  
         raise HTTPException(status_code=404, detail="No s'ha trobat cap alumne")
@@ -81,6 +81,7 @@ def read_alumne_all():
     return 
 
 # crea un alumne 
+"""
 @app.post("/alumne/add")
 def create_alumne(data: Alumne):
     
@@ -110,6 +111,38 @@ def create_alumne(data: Alumne):
         "id Alumne": alumne_id,
         "nom": nom
     }
+"""
+
+@app.post("/alumne/add")
+def create_alumneDescAula(data: tablaAlumne):
+    # obtener los datos del alumno que recibe el método por parametro
+    NomAlumne = data.NomAlumne
+    Cicle = data.Cicle
+    Curs = data.Curs
+    Grup = data.Grup
+    DescAula = data.DescAula
+    
+    # verificar si el aula existe, gracias al idAula proporcionado por ese alumno nuevo, si no existe, lanzar excepción
+    idAula_exists = db_alumnes.check_DescAula(DescAula)
+    if not idAula_exists:
+        #TODO: si el aula no existe, crearla directamente con los valores obtenidos
+       create_aula()
+    
+    # verificar si el alumno existe, si ya existe lanzar excepción, si no existe, seguir con la creación
+    alumne_exists = db_alumnes.check_Alumne(NomAlumne, Cicle, Curs, Grup)
+    if alumne_exists:
+        raise HTTPException(status_code=400, detail="L'alumne ja existeix.")
+    
+    # crea el alumno si todas las verificaciones pasan
+    alumne_id = db_alumnes.create_alumneDescAula(NomAlumne, Cicle, Curs, Grup, DescAula)
+    
+    # mensaje para que el usuario obtenga feedback de lo que ha hecho
+    return {
+        "msg": "S’ha afegit correctement",
+        "id Alumne": alumne_id,
+        "nom": NomAlumne
+    }
+
 
 # endpoint que actualiza a un alumno a partir de su id
 @app.put("/alumne/update/{id}")
@@ -130,16 +163,33 @@ def delete_alumne(id:int):
     return {"msg": f"S'ha eliminat l'alumne: {alumne_data[2]}"}
 
 @app.post("/alumne/loadAlumnes")
-def load_alumnes(path:str):
-    if not os.path.isfile(path):
-        return JSONResponse(status_code=400, content={"status": "error", "message": "El archivo no existe."})
+def load_alumnes(fitxer: UploadFile):
+    content = fitxer.file.read().decode()
+    reader = csv.reader(content.splitlines(), delimiter=",")
+    header = next(reader)
+    for row in reader:
+        row_formatted = [
+            row[3], row[4], row[5], row[6], row[0]       
+        ]
+        ALUMNE = tablaAlumne(
+            NomAlumne = row_formatted[0],
+            Cicle = row_formatted[1],
+            Curs = row_formatted[2],
+            Grup = row_formatted[3],
+            DescAula = row_formatted[4]
+        )
+        create_alumneDescAula(ALUMNE)
+        
 
-# método que crea un aula a partir de su Descripción, si la descripción se repite en otro aula, lanza una excepción.
+    
+        
+
+# endpoint que crea un aula a partir de su Descripción, si la descripción se repite en otro aula, lanza una excepción.
 # TODO: "debo llamar a este método a la hora de leer el csv y tener que insertar los datos en la base de datos."
 @app.post("/aula/add")
 def create_aula(data: Aula):
-    idAula_exists = db_alumnes.check_DescAula(data.DescAula)
-    if idAula_exists:
+    DescAula_exists = db_alumnes.check_DescAula(data.DescAula)
+    if DescAula_exists:
         raise HTTPException(status_code=400, detail="El DescAula ja existeix.")
 
     DescAula = data.DescAula
