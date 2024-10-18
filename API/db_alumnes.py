@@ -1,4 +1,5 @@
 from client import db_client
+import csv
 
 # llegir tots els camps de la taula alumne 
 def read(orderby: str | None = None,  contain: str | None = None, skip: int = 0, limit: int | None = None):
@@ -40,7 +41,6 @@ def read_id(id):
         query = "SELECT * from Alumne where IdAlumne = %s;"
         value = (id,)
         cur.execute(query,value)
-        
         alumne = cur.fetchone()
     except Exception as e:
         return {"status": -1, "message": f"Error de connexió:{e}" }
@@ -81,22 +81,6 @@ def create_alumne(IdAula, NomAlumne, Cicle, Curs, Grup):
     return alumne_id
 
 # crear alumne amb DescAula
-def create_alumneDescAula(NomAlumne, Cicle, Curs, Grup, DescAula):
-        
-    try:
-        conn = db_client()
-        cur = conn.cursor()
-        query =  "INSERT INTO Alumne (NomAlumne, Cicle, Curs, Grup, DescAula) VALUES (%s,%s,%s,%s,%s);"
-        values = (NomAlumne, Cicle, Curs, Grup, DescAula)
-        cur.execute(query,values)
-        conn.commit()
-        alumne_id = cur.lastrowid
-    except Exception as e:
-        return {"status": -1, "message": f"Error de connexió:{e}" }
-    
-    finally:
-        conn.close()
-    return alumne_id
 
 # modificar alumne
 def update_alumne(IdAlumne, IdAula, NomAlumne, Cicle, Curs, Grup):
@@ -105,7 +89,7 @@ def update_alumne(IdAlumne, IdAula, NomAlumne, Cicle, Curs, Grup):
         cur = conn.cursor()  
         
         if not check_idAlumne_exists(IdAlumne):
-            return {"status": -1, "message": "IdAlumne no existe."}
+            return {"status": -1, "message": "IdAlumne no existeix"}
         
         query = "update Alumne SET IdAula = %s, NomAlumne = %s, Cicle = %s, Curs = %s, Grup = %s where IdAlumne = %s;"
         values=(IdAula, NomAlumne, Cicle, Curs, Grup, IdAlumne)
@@ -125,7 +109,7 @@ def update_alumne(IdAlumne, IdAula, NomAlumne, Cicle, Curs, Grup):
 # eliminar un alumne a partir de la seva id
 def delete_alumne(id):
     if not check_idAlumne_exists(id):
-        return {"status": -1, "message": "IdAlumne no existe."}  
+        return {"status": -1, "message": "IdAlumne no existeix"}  
     try:
         conn = db_client()
         cur = conn.cursor()
@@ -144,7 +128,7 @@ def delete_alumne(id):
 # crear un aula
 def create_aula(DescAula, Edifici, Pis):
     if check_DescAula(DescAula):
-        return {"status": -1, "message": "L'aula amb aquesta Descripció ja existeix."}
+        return {"status": -1, "message": "L'aula amb aquesta Descripció ja existeix"}
     try:
         conn = db_client()
         cur = conn.cursor()
@@ -152,13 +136,40 @@ def create_aula(DescAula, Edifici, Pis):
         values = (DescAula, Edifici, Pis)
         cur.execute(query,values)
         conn.commit()
-        aula_id = cur.lastrowid ## accede al id de la última fila añadida
+        aula_id = cur.lastrowid # accedeix a l'id de l'última fila que s'ha afegit
     except Exception as e:
         return {"status": -1, "message": f"Error de connexió:{e}" }
     
     finally:    
         conn.close()
     return aula_id
+
+# llegeix un csv
+def llegirCsv(file):
+    
+    # llegir el csv
+    contents = file.file.read() 
+    lines = contents.decode().splitlines() 
+
+    reader = csv.reader(lines[1:])  
+    for row in reader:
+        if len(row) < 7:  # verifica que el csv sempre tingui 6 columnes
+            continue
+
+        DescAula, Edifici, Pis, NomAlumne, Cicle, Curs, Grup = row # a la variable row, li asigna els valors del csv
+        
+        # verificar si el aula ya existe
+        if not check_DescAula(DescAula):
+            # insertar el aula en la base de datos
+            create_aula(DescAula, Edifici, Pis) 
+
+        # verificar si l'alumne existeix
+        if not check_Alumne(NomAlumne, Cicle, Curs, Grup):
+            IdAula = get_IdAulaByDescAula(DescAula)
+            # fer insert de l'alumne
+            create_alumne(IdAula, NomAlumne, Cicle, Curs, Grup) 
+    
+    return "Càrrega feta amb èxit"
 
 ##################### CHECKS #####################
 
@@ -184,47 +195,55 @@ def check_idAlumne_exists(IdAlumne):
         cur = conn.cursor()
         query = "select count(*) from Alumne where IdAlumne = %s;"
         cur.execute(query, (IdAlumne,))
-        count = cur.fetchone()[0]
-        return count > 0
+        count = cur.fetchone()
+        return count[0] > 0 if count else False
     except Exception as e:
         print(f"Error al verificar IdAlumne: {e}")
         return False 
     finally:
         conn.close()
-
+    
+# verifica l'aula depenent de la seva descripció
 def check_DescAula(DescAula): 
     try:
         conn = db_client()
         cur = conn.cursor()
         query = "select count(*) from Aula where DescAula = %s;"
         cur.execute(query, (DescAula,))
-        count = cur.fetchone()[0]
-        return count > 0
+        count = cur.fetchone()
+        return count[0] > 0 if count else False
     except Exception as e:
         print(f"Error al verificar DescAula: {e}")
         return False 
     finally:
         conn.close()
-        
+    
+# getter per obtenir el IdAula a partir de la seva descripció
+def get_IdAulaByDescAula(DescAula): 
+    try:
+        conn = db_client()
+        cur = conn.cursor()
+        query = "select IdAula from Aula where DescAula = %s;"
+        cur.execute(query, (DescAula,))
+        count = cur.fetchone()
+        return count[0] if count else False
+    except Exception as e:
+        print(f"Error al verificar DescAula: {e}")
+        return False
+    finally:
+        conn.close()
+    
+# verifica un alumne a partir de certs paràmetres    
 def check_Alumne(NomAlumne, Cicle, Curs, Grup):
     try:
         conn = db_client()
         cur = conn.cursor()
         query = "select count(*) from Alumne where NomAlumne = %s and Cicle = %s and Curs = %s and Grup = %s;"
         cur.execute(query, (NomAlumne,Cicle,Curs,Grup,))
-        count = cur.fetchone()[0]
-        return count > 0
+        count = cur.fetchone()
+        return count[0] > 0 if count else False
     except Exception as e:
         print(f"Error al verificar NomAlumne: {e}")
         return False 
     finally:
         conn.close()
-        
-# leer csv
-def llegir_csv(ruta):
-    datos = []
-    with open(ruta, mode='r') as file:
-        for linia in file:
-            campos = linia.strip().split(",")
-            datos.append(campos)
-    return datos

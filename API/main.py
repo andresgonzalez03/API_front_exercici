@@ -4,7 +4,6 @@ import alumnes
 from typing import List
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-import csv
 from fastapi import FastAPI, File, UploadFile
 
 
@@ -24,7 +23,7 @@ app.add_middleware(
 class Alumne(BaseModel):
     IdAlumne: int
     IdAula: int
-    NomClient: str
+    NomAlumne: str
     Cicle : str
     Curs: str
     Grup: str
@@ -53,7 +52,7 @@ class Aula(BaseModel):
 def read_root():
     return{"Alumnes API"}
         
-# método que devuelve una lista de alumnos y permite usar cláusulas de query
+# endpoint que retorna una llista d'alumnes i permet utilitzar paràmeters de query
 @app.get("/alumne/list", response_model=List[tablaAlumne])
 def read_alumnes(orderby: str | None = None,  contain: str | None = None, skip: int = 0, limit: int | None = None ):
     alumnes_data = db_alumnes.read(orderby=orderby, contain=contain, skip=skip, limit=limit)
@@ -62,7 +61,7 @@ def read_alumnes(orderby: str | None = None,  contain: str | None = None, skip: 
     
     return alumnes.alumnes_schema(alumnes_data)
 
-# método que devuelve un alumno por su id
+# endpoint que retorna un alumne pel seu id
 @app.get("/alumne/show/{id}")
 def read_alumne_id(id:int):
     if db_alumnes.read_id(id) is not None:
@@ -71,6 +70,7 @@ def read_alumne_id(id:int):
         raise HTTPException(status_code=404, detail="No s'ha trobat cap alumne amb aquesta ID")
     return alumne
 
+# endpoint que retorna una llista de tots els alumnes i les seves dades
 @app.get("/alumne/listAll")
 def read_alumne_all():
     alumnes_data = db_alumnes.read_alumneAll()
@@ -78,65 +78,32 @@ def read_alumne_all():
        return alumnes.alumnes_schema_all(alumnes_data)
     else:
         raise HTTPException(status_code=404, detail="No s'ha trobat cap alumne amb aquesta ID")
-    return 
+    
 
 # crea un alumne 
-"""
 @app.post("/alumne/add")
 def create_alumne(data: Alumne):
     
-    # obtener los datos del alumno que recibe el método por parametro
-    idAula = data.idAula
-    nom = data.nom
-    cicle = data.cicle
-    curs = data.curs
-    grup = data.grup
-    
-    # verificar si el aula existe, gracias al idAula proporcionado por ese alumno nuevo, si no existe, lanzar excepción
-    idAula_exists = db_alumnes.check_idAula(idAula)
-    if not idAula_exists:
-        raise HTTPException(status_code=400, detail="L'aula no existeix. Si us plau, creeu l'aula abans d'afegir un alumne. Fes /aula/add per afegir un aula")
-    
-    # verificar si el alumno existe, si ya existe lanzar excepción, si no existe, seguir con la creación
-    alumne_exists = db_alumnes.check_Alumne(nom,cicle,curs,grup)
-    if alumne_exists:
-        raise HTTPException(status_code=400, detail="L'alumne ja existeix.")
-    
-    # crea el alumno si todas las verificaciones pasan
-    alumne_id = db_alumnes.create_alumne(idAula,nom,cicle, curs, grup)
-    
-    # mensaje para que el usuario obtenga feedback de lo que ha hecho
-    return {
-        "msg": "S’ha afegit correctement",
-        "id Alumne": alumne_id,
-        "nom": nom
-    }
-"""
-
-@app.post("/alumne/add")
-def create_alumneDescAula(data: tablaAlumne):
-    # obtener los datos del alumno que recibe el método por parametro
+    # obtenir les dades de l'alumne a partir de l'objecte que li passem per paràmetre
+    IdAula = data.IdAula
     NomAlumne = data.NomAlumne
     Cicle = data.Cicle
     Curs = data.Curs
     Grup = data.Grup
-    DescAula = data.DescAula
     
-    # verificar si el aula existe, gracias al idAula proporcionado por ese alumno nuevo, si no existe, lanzar excepción
-    idAula_exists = db_alumnes.check_DescAula(DescAula)
+    # verificar si l'aula existeix, gràcies al idAula proporcionat pel nou alumne si no existeix, llança una excepció
+    idAula_exists = db_alumnes.check_idAula(IdAula)
     if not idAula_exists:
-        #TODO: si el aula no existe, crearla directamente con los valores obtenidos
-       create_aula()
+        raise HTTPException(status_code=400, detail="L'aula no existeix. Si us plau, creeu l'aula abans d'afegir un alumne. Fes /aula/add per afegir un aula")
     
-    # verificar si el alumno existe, si ya existe lanzar excepción, si no existe, seguir con la creación
+    #  verificar si l'alumne existeix, si ja existeix llança una excepció, sinó segueix amb la creació de l'alumne
     alumne_exists = db_alumnes.check_Alumne(NomAlumne, Cicle, Curs, Grup)
     if alumne_exists:
         raise HTTPException(status_code=400, detail="L'alumne ja existeix.")
     
-    # crea el alumno si todas las verificaciones pasan
-    alumne_id = db_alumnes.create_alumneDescAula(NomAlumne, Cicle, Curs, Grup, DescAula)
+    # crea l'alumne si tot va bé
+    alumne_id = db_alumnes.create_alumne(IdAula,NomAlumne, Cicle, Curs, Grup)
     
-    # mensaje para que el usuario obtenga feedback de lo que ha hecho
     return {
         "msg": "S’ha afegit correctement",
         "id Alumne": alumne_id,
@@ -144,14 +111,17 @@ def create_alumneDescAula(data: tablaAlumne):
     }
 
 
-# endpoint que actualiza a un alumno a partir de su id
+# endpoint que actualitza un alumne a partir de la seva id
 @app.put("/alumne/update/{id}")
 def update_alumne(id:int, data: AlumneUpdate): # hago id:int porque en este caso los objetos de tipo AlumneUpdate no tienen la propiedad IdAlumne y por lo tanto no puedo acceder a ella
-    updated_alumnes = db_alumnes.update_alumne(id, data.IdAula, data.NomAlumne, data.Cicle, data.Curs, data.Grup)
-    if updated_alumnes == 0:
-        raise HTTPException(status_code=404, detail="No s'ha trobat res per actualitzar")  
+    if not db_alumnes.check_idAlumne_exists(id):
+        raise HTTPException(status_code=404, detail=f"No s'ha trobat cap alumne amb id: {id}") 
+    db_alumnes.update_alumne(id, data.IdAula, data.NomAlumne, data.Cicle, data.Curs, data.Grup)
+    return {
+        "msg": f"S'ha modificat l'alumne amb id: {id}"
+    } 
 
-# endpoint que borra un alumno a partir de su id    
+# endpoint que esborrra un alumne a partir de la seva id    
 @app.delete("/alumne/delete/{id}")
 def delete_alumne(id:int):
     # trobem el nom de l'alumne per poder mostrar-lo per pantalla
@@ -164,28 +134,9 @@ def delete_alumne(id:int):
 
 @app.post("/alumne/loadAlumnes")
 def load_alumnes(fitxer: UploadFile):
-    content = fitxer.file.read().decode()
-    reader = csv.reader(content.splitlines(), delimiter=",")
-    header = next(reader)
-    for row in reader:
-        row_formatted = [
-            row[3], row[4], row[5], row[6], row[0]       
-        ]
-        ALUMNE = tablaAlumne(
-            NomAlumne = row_formatted[0],
-            Cicle = row_formatted[1],
-            Curs = row_formatted[2],
-            Grup = row_formatted[3],
-            DescAula = row_formatted[4]
-        )
-        create_alumneDescAula(ALUMNE)
-        
-
+    return db_alumnes.llegirCsv(fitxer)
     
-        
-
-# endpoint que crea un aula a partir de su Descripción, si la descripción se repite en otro aula, lanza una excepción.
-# TODO: "debo llamar a este método a la hora de leer el csv y tener que insertar los datos en la base de datos."
+# endpoint que crea un aula, però verifica si no es repeteix la descripció d'aquesta nova aula en una que ja existeix
 @app.post("/aula/add")
 def create_aula(data: Aula):
     DescAula_exists = db_alumnes.check_DescAula(data.DescAula)
